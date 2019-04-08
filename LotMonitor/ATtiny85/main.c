@@ -9,7 +9,7 @@
 #include "main.h"
 
 #define WS2819_STRIPE_LEN 5
-#define WS2819_BRIGHTNESS 1 // percent
+#define WS2819_BRIGHTNESS 50 // percent
 
 struct cRGB led[WS2819_STRIPE_LEN];
 
