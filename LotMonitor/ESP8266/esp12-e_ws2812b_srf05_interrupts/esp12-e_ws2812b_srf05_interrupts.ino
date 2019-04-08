@@ -143,19 +143,17 @@ void loop(){
     //Serial.print("Nearest object within 3m: ");
     //Serial.println(SRF05_distance_cm);
     int bars;
-    if(distance_cm<101) {
-      bars = (100 - distance_cm) / 20;
-      if(++bars > 4) { // last 20cm ... let it blink
+    if(distance_cm<26) { // last 25cm ... let it blink like crazy
         int32_t now = asm_ccount();
         if( ((uint32_t)(now-WS2812B_alert_cnt)) > 12000000) { // 12M CCOUNT = 150ms
           WS2812B_alert_state = !WS2812B_alert_state;
           WS2812B_alert_cnt = now;
         }
-        if(WS2812B_alert_state) { bar(CRGB::Green, bars);
+        if(WS2812B_alert_state) { bar(CRGB::Green, 5);
         } else {                  bar(CRGB::Black, 5);    }
-      } else {
-        bar(CRGB::Green, bars);
-      }
+    } else if(distance_cm<101) { // 100-25cm/5lebs=15cm
+      bars = (100 - distance_cm) / 15;
+      bar(CRGB::Green, ++bars);
     } else { // 100cm-300cm
       bars = (distance_cm-100)/40; // 2m/5leds=40cm
       bar(CRGB::Red, ++bars);
