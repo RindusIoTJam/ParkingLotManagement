@@ -24,8 +24,11 @@ volatile int32_t interrupt_cnt     = INTERRUPT_DIV;
 volatile int32_t SRF05_distance_cm = 0;
 volatile int32_t last_25cm_flicker = 0;
 
-// Set all stripe LED to RGB
+//---------
+// This function lights a bar in the given RGB and length.
+//----------
 void inline setLEDS(uint8_t r, uint8_t g, uint8_t b, uint8_t c) {
+//----------
 #ifdef WS2819_BRIGHTNESS
   uint8_t factor = 100/WS2819_BRIGHTNESS;
 #endif
@@ -43,11 +46,19 @@ void inline setLEDS(uint8_t r, uint8_t g, uint8_t b, uint8_t c) {
   ws2812_setleds(led,WS2819_STRIPE_LEN);
 }
 
+//---------
+// This function turns all LEDs off
+//----------
 void inline allOFF() {
+//----------
   allColor(color_black);
 }
 
+//---------
+// This function lights all LEDs to a given color
+//----------
 void inline allColor(struct cRGB color) {
+//----------
   setLEDS(color.r,color.g,color.b, WS2819_STRIPE_LEN);
 }
 
@@ -60,18 +71,21 @@ void inline barColor(struct cRGB color, int bars) {
 }
 
 
-//ISR(TIMER0_COMPA_vect)
+//---------
+// This function is executed by timer interupt
+//----------
 ISR(TIM0_COMPA_vect) {
+//----------
   // skip some interrupts ;-)
   if (++interrupt_cnt > INTERRUPT_DIV)
   {
     interrupt_cnt = 0;
+
     last_25cm_flicker = !last_25cm_flicker;
 
     PORTB |= (1 << SRF05_TRIGGER);   // Trigger SRF05 Measurement
     _delay_us(10);
     PORTB &= ~(1 << SRF05_TRIGGER);
-    //PORTB &= ~(1 << SRF05_ECHO);
 
     uint32_t echo_time_us = 0;
     uint32_t echo_wait_us = 300;    // timeout to wait for echo in us
@@ -84,7 +98,7 @@ ISR(TIM0_COMPA_vect) {
     if (echo_wait_us) {                     // we got an echo
       PORTB |= (1 << ONBOARD_LED);          // turn on led (just for fun)
 
-      // count echo HIGH time in us for a max of 300cm
+      // count echo HIGH time
       while ( (PINB & (1 << SRF05_ECHO)) ) {
         _delay_us(1);
         ++echo_time_us;
@@ -103,8 +117,12 @@ ISR(TIM0_COMPA_vect) {
   }
 }
 
-int main(void)
-{
+//---------
+// This function is main entry point
+//----------
+int main(void) {
+//----------
+
   // Setup Data-Direction-Register
   DDRB   &= ~(1 << SRF05_ECHO);   // set data direction register for HY-SRF05 echo port
   PORTB  &= ~(1 << SRF05_ECHO);   // No internal pullup
