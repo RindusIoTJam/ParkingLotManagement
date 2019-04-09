@@ -16,7 +16,7 @@
 #define INTERRUPT_DIV 10
 
 #define WS2819_STRIPE_LEN 5
-#define WS2819_BRIGHTNESS 25 // percent [optional]
+#define WS2819_BRIGHTNESS 25 // percent [optional, comment for full brightness]
 
 struct cRGB led[WS2819_STRIPE_LEN+1];
 
@@ -61,8 +61,7 @@ void inline barColor(struct cRGB color, int bars) {
 
 
 //ISR(TIMER0_COMPA_vect)
-ISR(TIM0_COMPA_vect)
-{
+ISR(TIM0_COMPA_vect) {
   // skip some interrupts ;-)
   if (++interrupt_cnt > INTERRUPT_DIV)
   {
