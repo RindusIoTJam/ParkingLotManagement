@@ -63,7 +63,7 @@ void inline allColor(struct cRGB color) {
 }
 
 //---------
-// This function lights a bar in the given color and length.
+// This function lights a bar in the given color and length
 //----------
 void inline barColor(struct cRGB color, int bars) {
 //----------
@@ -77,14 +77,13 @@ void inline barColor(struct cRGB color, int bars) {
 ISR(TIM0_COMPA_vect) {
 //----------
 
-  if (++interrupt_cnt > INTERRUPT_DIV)         // skip some interrupts b/c SRF05
-  {                                            //   handles max. 20 trigger/sec.
-    interrupt_cnt = 0;                         //   INTERRUPT_DIV=10 does 10/sec
-
+  if (++interrupt_cnt > INTERRUPT_DIV) {       // skip some interrupts b/c SRF05
+    interrupt_cnt = 0;                         //   handles max. 20 trigger/sec.
+                                               //   INTERRUPT_DIV=10 does 10/sec
     last_25cm_flicker = !last_25cm_flicker;    // See "distance_cm < 26" in main
                                                //   while(1) loop
-    PORTB |= (1 << SRF05_TRIGGER);             // Trigger SRF05 Measurement
-    _delay_us(10);
+    PORTB |= (1 << SRF05_TRIGGER);             // Trigger SRF05 measurement by
+    _delay_us(10);                             //   min. 10us HIGH pulse
     PORTB &= ~(1 << SRF05_TRIGGER);
 
     uint32_t echo_time_us = 0;
