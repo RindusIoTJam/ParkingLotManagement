@@ -16,9 +16,9 @@
 #define INTERRUPT_DIV 10
 
 #define WS2819_STRIPE_LEN 5
-#define WS2819_BRIGHTNESS 25 // percent [optional, comment for full brightness]
+#define WS2819_BRIGHTNESS 25  // percent [optional, comment for full brightness]
 
-struct cRGB led[WS2819_STRIPE_LEN+1];
+struct cRGB led[WS2819_STRIPE_LEN+1];      // one more to prevent array overflow
 
 volatile int32_t interrupt_cnt     = INTERRUPT_DIV;
 volatile int32_t SRF05_distance_cm = 0;
@@ -72,48 +72,47 @@ void inline barColor(struct cRGB color, int bars) {
 
 
 //---------
-// This function is executed by timer interupt
+// This function is executed 100 times per sec by timer interupt (See TCCR0B)
 //----------
 ISR(TIM0_COMPA_vect) {
 //----------
-  // skip some interrupts ;-)
-  if (++interrupt_cnt > INTERRUPT_DIV)
-  {
-    interrupt_cnt = 0;
 
-    last_25cm_flicker = !last_25cm_flicker;
+  if (++interrupt_cnt > INTERRUPT_DIV)         // skip some interrupts b/c SRF05
+  {                                            //   handles max. 20 trigger/sec.
+    interrupt_cnt = 0;                         //   INTERRUPT_DIV=10 does 10/sec
 
-    PORTB |= (1 << SRF05_TRIGGER);   // Trigger SRF05 Measurement
+    last_25cm_flicker = !last_25cm_flicker;    // See "distance_cm < 26" in main
+                                               //   while(1) loop
+    PORTB |= (1 << SRF05_TRIGGER);             // Trigger SRF05 Measurement
     _delay_us(10);
     PORTB &= ~(1 << SRF05_TRIGGER);
 
     uint32_t echo_time_us = 0;
-    uint32_t echo_wait_us = 300;    // timeout to wait for echo in us
+    uint32_t echo_wait_us = 300;               // timeout to wait for echo in us
 
-    while ( !(PINB & (1 << SRF05_ECHO)) & (echo_wait_us > 0) ) { // Wait 4 echo
-      _delay_us(1);
+    while ( !(PINB & (1 << SRF05_ECHO)) & (echo_wait_us > 0) ) {  // Wait 4 echo
+      _delay_us(1);                                               //  max. 300us
       --echo_wait_us;
     }
 
-    if (echo_wait_us) {                     // we got an echo
-      PORTB |= (1 << ONBOARD_LED);          // turn on led (just for fun)
+    if (echo_wait_us) {                            // we got an echo
+      PORTB |= (1 << ONBOARD_LED);                 // turn on led (just for fun)
 
-      // count echo HIGH time
-      while ( (PINB & (1 << SRF05_ECHO)) ) {
+      while ( (PINB & (1 << SRF05_ECHO)) ) {       // count echo HIGH time
         _delay_us(1);
         ++echo_time_us;
       }
     } else {
-      allColor(color_blue);
+      allColor(color_blue);                       // no echo, sensor gone?
     }
 
-    if (echo_time_us > 17450) {
+    if (echo_time_us > 17450) {          // 17450 / 58 = 300.86cm, to be ignored
       SRF05_distance_cm = 0;
     } else {
       SRF05_distance_cm = echo_time_us / 58;
     }
 
-    PORTB &= ~(1 << ONBOARD_LED);    // turn off led
+    PORTB &= ~(1 << ONBOARD_LED);        // turn off led
   }
 }
 
@@ -139,26 +138,25 @@ int main(void) {
 
   while(1)
   {
-    int distance_cm = SRF05_distance_cm;
+    int distance_cm = SRF05_distance_cm;     // snapshot b/c volatile may change
     int bars;
 
-    // Switch stripe off if invalid (0) distance of greater than 3m
-    if ((distance_cm < 1) | (distance_cm > 300)) {
-      allOFF();
-    } else {
-      if (distance_cm < 26 ) {
-        if ( last_25cm_flicker ) {
-          allOFF();
-        } else {
-          barColor(color_red, WS2819_STRIPE_LEN);
+    if ((distance_cm < 1) | (distance_cm > 300)) { // Switch stripe off if
+      allOFF();                                    //   invalid (0) distance or
+    } else {                                       //   greater than 3m.
+      if (distance_cm < 26 ) {                     // less than 26cm, flicker
+        if ( last_25cm_flicker ) {                 //   all leds like crazy
+          allOFF();                                //   based on volatile
+        } else {                                   //   last_25cm_flicker.
+          barColor(color_red, WS2819_STRIPE_LEN);  //   See ISR(TIM0_COMPA_vect)
         }
-      } else {
-        if (distance_cm < 101) {
-          bars = (100 - distance_cm) / 15;
-          barColor(color_red, ++bars);
-        } else {
-          bars = (distance_cm-100)/40; // 2m/5leds=40cm
-          barColor(color_green, ++bars);
+      } else {                                     // Distance 26cm-3m:
+        if (distance_cm < 101) {                   //  more red leds if closer
+          bars = (100 - distance_cm) / 15;         //   than 1m till 26cm. One
+          barColor(color_red, ++bars);             //   additional led per 15cm
+        } else {                                   //  less green leds if closer
+          bars = (distance_cm-100)/40;             //   than 3m till 1m. One led
+          barColor(color_green, ++bars);           //   less per 40cm.
         }
       }
     }
