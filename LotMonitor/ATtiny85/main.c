@@ -16,7 +16,7 @@
 #define INTERRUPT_DIV 10
 
 #define WS2819_STRIPE_LEN 5
-#define WS2819_BRIGHTNESS 25  // percent [optional, comment for full brightness]
+//#define WS2819_BRIGHTNESS 25  // percent [optional, comment for full brightness]
 
 struct cRGB led[WS2819_STRIPE_LEN+1];      // one more to prevent array overflow
 
