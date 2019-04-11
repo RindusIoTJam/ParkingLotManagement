@@ -20,7 +20,6 @@
 
 struct cRGB led[WS2819_STRIPE_LEN+1];      // one more to prevent array overflow
 
-volatile int32_t interrupt_cnt     = INTERRUPT_DIV;
 volatile int32_t SRF05_distance_cm = 0;
 volatile int32_t last_25cm_flicker = 0;
 
@@ -74,45 +73,62 @@ void inline barColor(struct cRGB color, int bars) {
 //---------
 // This function is executed 100 times per sec by timer interupt (See TCCR0B)
 //----------
-ISR(TIM0_COMPA_vect) {
+ISR(TIMER1_COMPA_vect) {
 //----------
+  last_25cm_flicker = !last_25cm_flicker;    // See "distance_cm < 26" in main
+                                             //   while(1) loop
+  PORTB |= (1 << SRF05_TRIGGER);             // Trigger SRF05 measurement by
+  _delay_us(10);                             //   min. 10us HIGH pulse
+  PORTB &= ~(1 << SRF05_TRIGGER);
 
-  if (++interrupt_cnt > INTERRUPT_DIV) {       // skip some interrupts b/c SRF05
-    interrupt_cnt = 0;                         //   handles max. 20 trigger/sec.
-                                               //   INTERRUPT_DIV=10 does 10/sec
-    last_25cm_flicker = !last_25cm_flicker;    // See "distance_cm < 26" in main
-                                               //   while(1) loop
-    PORTB |= (1 << SRF05_TRIGGER);             // Trigger SRF05 measurement by
-    _delay_us(10);                             //   min. 10us HIGH pulse
-    PORTB &= ~(1 << SRF05_TRIGGER);
+  uint32_t echo_time_us = 0;
+  uint32_t echo_wait_us = 300;               // timeout to wait for echo in us
 
-    uint32_t echo_time_us = 0;
-    uint32_t echo_wait_us = 300;               // timeout to wait for echo in us
-
-    while ( !(PINB & (1 << SRF05_ECHO)) & (echo_wait_us > 0) ) {  // Wait 4 echo
-      _delay_us(1);                                               //  max. 300us
-      --echo_wait_us;
-    }
-
-    if (echo_wait_us) {                            // we got an echo
-      PORTB |= (1 << ONBOARD_LED);                 // turn on led (just for fun)
-
-      while ( (PINB & (1 << SRF05_ECHO)) ) {       // count echo HIGH time
-        _delay_us(1);
-        ++echo_time_us;
-      }
-    } else {
-      allColor(color_blue);                       // no echo, sensor gone?
-    }
-
-    if (echo_time_us > 17450) {          // 17450 / 58 = 300.86cm, to be ignored
-      SRF05_distance_cm = 0;
-    } else {
-      SRF05_distance_cm = echo_time_us / 58;
-    }
-
-    PORTB &= ~(1 << ONBOARD_LED);        // turn off led
+  while ( !(PINB & (1 << SRF05_ECHO)) & (echo_wait_us > 0) ) {  // Wait 4 echo
+    _delay_us(1);                                               //  max. 300us
+    --echo_wait_us;
   }
+
+  if (echo_wait_us) {                            // we got an echo
+    PORTB |= (1 << ONBOARD_LED);                 // turn on led (just for fun)
+
+    while ( (PINB & (1 << SRF05_ECHO)) ) {       // count echo HIGH time
+      _delay_us(1);
+      ++echo_time_us;
+    }
+  } else {
+    allColor(color_blue);                       // no echo, sensor gone?
+  }
+
+  if (echo_time_us > 17450) {          // 17450 / 58 = 300.86cm, to be ignored
+    SRF05_distance_cm = 0;
+  } else {
+    SRF05_distance_cm = echo_time_us / 58;
+  }
+
+  PORTB &= ~(1 << ONBOARD_LED);        // turn off led
+}
+
+/* ISR(TIMER1_COMPA_vect) {
+  PORTB ^= _BV(ONBOARD_LED);
+} */
+
+//---------
+// This function sets up timer1 to fire 10 times per second
+//----------
+int setupSRF05triggerTimer(void) {
+//----------
+  // Clear registers
+  TCNT1 = 0;
+  TCCR1 = 0;
+
+  TCCR1 |= (1 << CTC1);           // set timer counter mode to CTC
+  OCR1C = 195;                    // set Timer's counter max value
+  OCR1A = OCR1C;
+
+  // set prescaler to 8192 (CLK=16MHz/8192/195=10.01Hz, 0.099s)
+  TCCR1 |= (1 << CS13) | (1 << CS12) | (1 << CS11);
+  TIMSK |= (1 << OCIE1A);         // enable Timer CTC interrupt
 }
 
 //---------
@@ -120,7 +136,6 @@ ISR(TIM0_COMPA_vect) {
 //----------
 int main(void) {
 //----------
-
   // Setup Data-Direction-Register
   DDRB   &= ~(1 << SRF05_ECHO);   // set data direction register for HY-SRF05 echo port
   PORTB  &= ~(1 << SRF05_ECHO);   // No internal pullup
@@ -128,11 +143,7 @@ int main(void) {
   DDRB   |= (1 << ONBOARD_LED);   // set data direction register for ONBOARD_LED as output
   DDRB   |= (1 << SRF05_TRIGGER); // set data direction register for HY-SRF05 trigger port
 
-  TCCR0A |= _BV(WGM01);           // set timer counter mode to CTC
-  TCCR0B |= _BV(CS02)|_BV(CS00);  // set prescaler to 1024 (CLK=16MHz/1024/160=97.68Hz, 0.010s)
-  OCR0A   = 160;                  // set Timer's counter max value
-  TIMSK  |= _BV(OCIE0A);          // enable Timer CTC interrupt
-
+  setupSRF05triggerTimer();
   sei();                          //enable global interrupt
 
   while(1)
