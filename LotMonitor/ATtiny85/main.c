@@ -73,7 +73,8 @@ void inline barColor(struct cRGB color, int bars) {
 }
 
 //---------
-// This function creates a beginning of the SRF05 trigger pulse
+// This function creates a beginning of the SRF05 trigger pulse every
+// 100 milliseconds and toggles the flicker-flag for the <26cm alarm
 //----------
 ISR(TIMER1_COMPA_vect) {
 //----------
@@ -101,13 +102,13 @@ ISR(PCINT0_vect){
 }
 
 //---------
-// This function increments ticks every microsecond and
-// creates a ending of the SRF05 trigger pulse after 10us.
+// This function increments ticks every 58 microseconds and creates
+// a ending of the SRF05 trigger pulse after 1 tick (= 58 microseconds)
 //----------
 ISR(TIMER0_COMPA_vect) {
 //----------
   ++ticks;
-  if ((ticks - SRF05_trigger_tick)) {
+  if (SRF05_trigger_tick) {
     SRF05_trigger_tick = 0;
     PORTB &= ~(1 << SRF05_TRIGGER);
   }
@@ -126,14 +127,13 @@ void setupInterrupts(void) {
   TIMSK  |= (1 << OCIE0A);  // enable Timer CTC interrupt
 
   /*
-   * Setup timer1 to fire 10 times per second
+   * Setup timer1 to fire every 0.1 second
    */
   TCNT1   = 0;              // Clear registers
   TCCR1   = 0;
   TCCR1  |= (1 << CTC1);    // set timer counter mode to CTC
   OCR1C   = 195;            // set Timer's counter max value
   OCR1A   = OCR1C;
-
   // set prescaler to 8192 (CLK=16MHz/8192/195=10.01Hz, 0.099s)
   TCCR1 |= (1 << CS13) | (1 << CS12) | (1 << CS11);
   TIMSK |= (1 << OCIE1A);   // enable Timer CTC interrupt
