@@ -78,27 +78,10 @@ void inline barColor(struct cRGB color, int bars) {
 //----------
 ISR(TIMER1_COMPA_vect) {
 //----------
-  PORTB |= (1 << SRF05_TRIGGER);
-  SRF05_trigger_tick = ticks;
-  last_25cm_flicker = !last_25cm_flicker;    // See "distance_cm < 26" in main
-                                             //   while(1) loop
-}
-
-//---------
-// This function measures the SRF05 echo length direct in distance in cm
-//----------
-ISR(PCINT0_vect){
-  if (!SRF05_echo_tick) {
-    SRF05_echo_tick = ticks;
-    PORTB |= (1 << ONBOARD_LED);                   // turn on led (just for fun)
-  } else {
-    SRF05_echo_length = ticks - SRF05_echo_tick;
-    if (SRF05_echo_length > 300) {
-      SRF05_echo_length = 0;
-    }
-    PORTB &= ~(1 << ONBOARD_LED);                  // turn off led
-    SRF05_echo_tick = 0;
-  }
+  PORTB |= (1 << SRF05_TRIGGER);           // Start SRF05 trigger
+  SRF05_trigger_tick = ticks;              // Snapshot trigger ticks
+  last_25cm_flicker = !last_25cm_flicker;  // See "distance_cm < 26" in main
+                                           //   while(1) loop
 }
 
 //---------
@@ -109,8 +92,34 @@ ISR(TIMER0_COMPA_vect) {
 //----------
   ++ticks;
   if (SRF05_trigger_tick) {
-    SRF05_trigger_tick = 0;
-    PORTB &= ~(1 << SRF05_TRIGGER);
+    SRF05_trigger_tick = 0;                // Reset trigger snapshot
+    PORTB &= ~(1 << SRF05_TRIGGER);        // End SRF05 trigger
+    MCUCR |= (1 << ISC01) | (1 << ISC00);  // The rising edge of INT0 generates
+                                           //   an interrupt request, so next
+                                           //   INT0 must be ECHO start.
+    PCMSK |= (1 << PCINT2);                // Pin Change Mask Register, enable
+                                           //   for ECHO pin PB2
+  }
+}
+
+//---------
+// This function measures the SRF05 echo length direct in distance in cm
+//----------
+ISR(PCINT0_vect){
+  if (!SRF05_echo_tick) {
+    SRF05_echo_tick = ticks;       // Snapshot ECHO start in ticks
+    MCUCR &= ~(1 << ISC00);        // The falling edge of INT0 generates an
+                                   // interrupt request, so next INT0 must be
+                                   // ECHO end.
+    PORTB |= (1 << ONBOARD_LED);   // Turn on led (just for fun)
+  } else {
+    SRF05_echo_length = ticks - SRF05_echo_tick;
+    if (SRF05_echo_length > 300) { // Ignores distance greater than 3m
+      SRF05_echo_length = 0;
+    }
+    PCMSK &= ~(1 << PCINT2);       // Pin Change Mask Register, disable for ECHO
+    PORTB &= ~(1 << ONBOARD_LED);  // Turn off led
+    SRF05_echo_tick = 0;
   }
 }
 
@@ -141,8 +150,8 @@ void setupInterrupts(void) {
   /*
    *  Setup Pin Change Interrupts for PB2
    */
-  GIMSK |= (1 << PCIE);     // General Interrupt Mask Register, Pin Change Interrupt Enable
-  PCMSK |= (1 << PCINT2);   // Pin Change Mask Register,
+  GIMSK |= (1 << PCIE);     // General Interrupt Mask Register,
+                            //   Pin Change Interrupt Enable
 }
 
 //---------
