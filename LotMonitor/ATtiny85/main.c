@@ -9,8 +9,7 @@
 #include "main.h"
 
 #define ONBOARD_LED   PB1
-#define SRF05_ECHO    PB2
-#define SRF05_TRIGGER PB3
+#define SRF05_1WIRE   PB3
 //      WS2819_DATA   PB4 // See Makefile WS2812_PIN
 
 #define INTERRUPT_DIV 10
@@ -78,7 +77,11 @@ void inline barColor(struct cRGB color, int bars) {
 //----------
 ISR(TIMER1_COMPA_vect) {
 //----------
-  PORTB |= (1 << SRF05_TRIGGER);           // Start SRF05 trigger
+  GIMSK &= ~(1 << PCIE);                   // General Interrupt Mask Register,
+                                           //   Pin Change Interrupt DISable
+  DDRB  |= (1 << SRF05_1WIRE);             // set data direction register to
+                                           //   OUT for HY-SRF05 to trigger port
+  PORTB |= (1 << SRF05_1WIRE);             // Start HY-SRF05 trigger
   SRF05_trigger_tick = ticks;              // Snapshot trigger ticks
   last_25cm_flicker = !last_25cm_flicker;  // See "distance_cm < 26" in main
                                            //   while(1) loop
@@ -93,12 +96,16 @@ ISR(TIMER0_COMPA_vect) {
   ++ticks;
   if (SRF05_trigger_tick) {
     SRF05_trigger_tick = 0;                // Reset trigger snapshot
-    PORTB &= ~(1 << SRF05_TRIGGER);        // End SRF05 trigger
+    PORTB &= ~(1 << SRF05_1WIRE);          // End HY-SRF05 trigger, and then...
+    DDRB  &= ~(1 << SRF05_1WIRE);          // Set data direction register to IN
+                                           //   for HY-SRF05 (echo)
     MCUCR |= (1 << ISC01) | (1 << ISC00);  // The rising edge of INT0 generates
                                            //   an interrupt request, so next
                                            //   INT0 must be ECHO start.
-    PCMSK |= (1 << PCINT2);                // Pin Change Mask Register, enable
-                                           //   for ECHO pin PB2
+    PCMSK |= (1 << SRF05_1WIRE);           // Pin Change Mask Register, ENable
+                                           //   for ECHO.
+    GIMSK |= (1 << PCIE);                  // General Interrupt Mask Register,
+                                           //   Pin Change Interrupt Enable
   }
 }
 
@@ -117,7 +124,9 @@ ISR(PCINT0_vect){
     if (SRF05_echo_length > 300) { // Ignores distance greater than 3m
       SRF05_echo_length = 0;
     }
-    PCMSK &= ~(1 << PCINT2);       // Pin Change Mask Register, disable for ECHO
+    GIMSK &= ~(1 << PCIE);         // General Interrupt Mask Register,
+                                   //   Pin Change Interrupt DISable
+    PCMSK &= ~(1 << SRF05_1WIRE);  // Pin Change Mask Register, DISable for ECHO
     PORTB &= ~(1 << ONBOARD_LED);  // Turn off led
     SRF05_echo_tick = 0;
   }
@@ -146,12 +155,6 @@ void setupInterrupts(void) {
   // set prescaler to 8192 (CLK=16MHz/8192/195=10.01Hz, 0.099s)
   TCCR1 |= (1 << CS13) | (1 << CS12) | (1 << CS11);
   TIMSK |= (1 << OCIE1A);   // enable Timer CTC interrupt
-
-  /*
-   *  Setup Pin Change Interrupts for PB2
-   */
-  GIMSK |= (1 << PCIE);     // General Interrupt Mask Register,
-                            //   Pin Change Interrupt Enable
 }
 
 //---------
@@ -160,11 +163,7 @@ void setupInterrupts(void) {
 int main(void) {
 //----------
   // Setup Data-Direction-Register
-  DDRB   &= ~(1 << SRF05_ECHO);   // set data direction register for HY-SRF05 echo port
-  PORTB  &= ~(1 << SRF05_ECHO);   // No internal pullup
-
-  DDRB   |= (1 << ONBOARD_LED);   // set data direction register for ONBOARD_LED as output
-  DDRB   |= (1 << SRF05_TRIGGER); // set data direction register for HY-SRF05 trigger port
+  DDRB   |= (1 << ONBOARD_LED);   // set data direction register for ONBOARD_LED to output
 
   setupInterrupts();
   sei();                          //enable global interrupt
